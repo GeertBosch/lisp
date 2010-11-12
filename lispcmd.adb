@@ -3,6 +3,7 @@ with Lisp; use Lisp;
 with Lisp.Interpreter; use Lisp.Interpreter;
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Exceptions; use Ada.Exceptions;
+with Ada.IO_Exceptions;
 procedure Lispcmd is
 
    Scan_Error : exception;
@@ -13,7 +14,7 @@ procedure Lispcmd is
    QUOTE     : constant Atomic := Atom ("QUOTE");
    ERROR     : constant Atomic := Atom ("ERROR");
 
-   Last_Predefined : constant Atomic :=  QUOTE;
+   Last_Predefined : constant Atomic :=  ERROR;
 
    function Link (Left : List; Right : Expr) return List is
      (if Left not in Atomic then cons (car (Left), Link (cdr (Left), Right))
@@ -110,58 +111,65 @@ procedure Lispcmd is
       return Rev_List (Result);
    end Scan_Line;
 
-   type Parse_State is record
-      Input  : List;
-      Output : Expr;
-   end record;
+   subtype Parse_State is List;
+   --  This subtype is used for documentation purposes in communicating current
+   --  parse state. The car of a Parse_State represents the resulting parse
+   --  tree, while the cdr contains remaining source text. In case of a syntax
+   --  error, the cdr is a non-nil atom
 
-   function "&" (S : Parse_State; L : List) return Parse_State is
-     (S.Input, cons (S.Output, L));
+   function appcar (X : Non_Nil_List; E : Expr) return Non_Nil_List is
+     (cons (cons (car (X), E), cdr (X))); -- (A, B) => ((A, E), B)
 
    function Parse (S : List) return Parse_State;
 
+   function Parse_Error (S : Parse_State) return Boolean is
+     (cdr (S) in Non_Nil_Atom);
+
    function Parse_Pair (S : Parse_State; L : List) return Parse_State is
-     (if S.Input = nil then Parse_Pair ((Scan_Line ("PERIOD> "), S.Output), L)
-      elsif car (S.Input) /= RPAR then
-        (cons (S.Output, S.Input), Link (Rev_List (L), ERROR))
-      else (cdr (S.Input), Link (Rev_List (L), S.Output)));
+     (if cdr (S) = nil then Parse_Pair (cons (car (S), Scan_Line), L)
+      elsif atom (cdr (S)) then S -- Propagate earlier error
+      elsif cadr (S) /= RPAR then (cons (cdr (S), ERROR))
+      else cons (Link (Rev_List (L), car (S)), cddr (S)));
 
    function Parse_Period (S : Parse_State) return Parse_State is
-     (if S.Input = nil then Parse_Period ((Scan_Line ("PERIOD> "), S.Output))
-      else Parse_Pair (Parse (S.Input), S.Output));
+     (if cdr (S) = nil then Parse_Period (cons (car (S), Scan_Line))
+      else Parse_Pair (Parse (cdr (S)), car (S)));
 
    function Parse_List (S : Parse_State) return Parse_State is
-     (if S.Input = nil then Parse_List ((Scan_Line ("LPAR> "), S.Output))
-      elsif car (S.Input) = RPAR then (cdr (S.Input), Rev_List (S.Output))
-      elsif car (S.Input) = PERIOD then Parse_Period ((cdr (S.Input), S.Output))
-      else Parse_List (Parse (S.Input) & S.Output));
+     (if cdr (S) = nil then Parse_List (cons (car (S), Scan_Line))
+      elsif Parse_Error (S) then S
+      elsif cadr (S) = RPAR then cons (Rev_List (car (S)), cddr (S))
+      elsif car (S) /= nil and then cadr (S) = PERIOD
+         then Parse_Period (cons (car (S), cddr (S)))
+      else Parse_List (appcar (Parse (cdr (S)), car (S))));
 
    function Parse (S : List) return Parse_State is
-     (if S = nil then (nil, nil)
-      elsif car (S) = LPAR then Parse_List ((cdr (S), nil))
-      elsif car (S) = QUOTE then (cddr (S), cadr (S))
-      else (cdr (S), car (S)));
+     (if S = nil then cons (nil, nil)
+      elsif car (S) = LPAR then Parse_List (cons (nil, cdr (S)))
+      elsif car (S) in RPAR | PERIOD then cons (S, ERROR)
+      elsif car (S) = QUOTE then cdr (S)
+      else S);
 
 begin
    REPL : loop
       declare
          E : Expr := Scan_Line ("> ");
-         S : Parse_State;
+         S : List;
       begin
          S := Parse (E);
-         Put_Line (" => " & Image (S.Output));
+         Put_Line (" => " & Image (car (S)));
 
-         if S.Input /= nil then
-            Put_Line ("??? " & Image (S.Input));
+         if cdr (S) /= nil then
+            Put_Line ("??? " & Image (cdr (S)));
 
-         elsif False and then not Atom (S.Output) then
-            Put_Line ("= "
-              & Image (evalquote (car (S.Output), cdr (S.output))));
+         elsif False and then not Atom (car (S)) then
+            Put_Line ("= " & Image (evalquote (caar (S), cdar (S))));
          end if;
       end;
    end loop REPL;
 
 exception
+   when Ada.IO_Exceptions.End_Error => Put_Line ("Goodbye.");
    when E : others =>
       Put (Exception_Information (E));
       Dump;
