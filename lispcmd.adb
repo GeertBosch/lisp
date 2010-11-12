@@ -1,41 +1,45 @@
 pragma Ada_2012;
 with Lisp; use Lisp;
+with Lisp.Interpreter; use Lisp.Interpreter;
 with Ada.Text_IO; use Ada.Text_IO;
+with Ada.Exceptions; use Ada.Exceptions;
 procedure Lispcmd is
 
    Scan_Error : exception;
 
-   LPAR      : constant Atom := Find ("LPAR");
-   RPAR      : constant Atom := Find ("RPAR");
-   PERIOD    : constant Atom := Find ("PERIOD");
-   ERROR     : constant Atom := Find ("ERROR");
-   QUOTE     : constant Atom := Find ("QUOTE");
+   LPAR      : constant Atomic := Atom ("LPAR");
+   RPAR      : constant Atomic := Atom ("RPAR");
+   PERIOD    : constant Atomic := Atom ("PERIOD");
+   QUOTE     : constant Atomic := Atom ("QUOTE");
+   ERROR     : constant Atomic := Atom ("ERROR");
 
-   Last_Predefined : constant Atom :=  QUOTE;
+   Last_Predefined : constant Atomic :=  QUOTE;
 
-   procedure Put (A : Atom);
+   function Link (Left : List; Right : Expr) return List is
+     (if Left not in Atomic then cons (car (Left), Link (cdr (Left), Right))
+      elsif Left = nil then Right
+      else cons (Left, Right));
 
-   function Img (E : Expr) return String;
+   function "-" (Left, Right : Character) return Integer is
+     (Character'Pos (Left) - Character'Pos (Right));
 
-   function Img_List (E : Expr) return String is
-     (if E = nil then ""
-      elsif E in Atom then "." & Image (E)
-      elsif cdr (E) = nil then Img (car (E))
-      else Img (car (E)) & ' ' & Img_List (cdr (E)));
+   function Upcase (C : Character) return Character is
+     (if C not in 'a' .. 'z' then C
+      else Character'Val (Character'Pos (C) + ('A' - 'a')));
 
-   function Img (E : Expr) return String is
-     (if E = nil then "()"
-      elsif E in Atom then Image (E)
-      else '(' & Img_List (E) & ')');
+   function Upcase (S : String) return String is
+     (if S'Length = 0 then ""
+      else Upcase (S (S'First)) & Upcase (S (S'First + 1 .. S'Last)));
 
-   function Needs_Quoting (A : Atom) return Boolean is
+   function Needs_Quoting (A : Atomic) return Boolean is
      (A /= nil and A <= Last_Predefined);
 
-   function Reverse_And_Append (S : Expr; T : Expr) return Expr is
+   function Reverse_And_Append (S : List; T : Expr) return Expr is
      (if cdr (S) = nil then cons (car (S), T)
       else Reverse_And_Append (cdr (S), cons (car (S), T)));
 
-   function Rev_List (S : Expr) return Expr is (Reverse_And_Append (S, nil));
+   function Rev_List (S : List) return Expr is 
+     (if S = nil then nil else Reverse_And_Append (S, nil));
 
    function Get_Line (Prompt : String) return String is
    begin
@@ -68,7 +72,8 @@ procedure Lispcmd is
 
       procedure Scan_Atom_Part is
       begin
-         while Ptr < Last and then Line (Ptr + 1) in 'A' .. 'Z' | '0' .. '9'
+         while Ptr < Last 
+           and then Line (Ptr + 1) in 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9'
          loop
             Ptr := Ptr + 1;
          end loop;
@@ -79,13 +84,13 @@ procedure Lispcmd is
       while Ptr <= Line'Last loop
          case Line (Ptr) is
             when ' '      => null;
-            when 'A'..'Z' =>
+            when 'A'..'Z' | 'a' .. 'z' =>
                Scan_Atomic_Symbol : declare
                   First : constant Positive := Ptr;
-                  A     : Atom;
+                  A     : Atomic;
                begin
                   Scan_Atom_Part;
-                  A := Find (Line (First .. Ptr));
+                  A := Atom (Upcase (Line (First .. Ptr)));
 
                   Result := cons (A,
                     (if Needs_Quoting (A)
@@ -113,45 +118,51 @@ procedure Lispcmd is
    function "&" (S : Parse_State; L : List) return Parse_State is
      (S.Input, cons (S.Output, L));
 
-   function Parse (S : Expr) return Parse_State;
+   function Parse (S : List) return Parse_State;
+
+   function Parse_Pair (S : Parse_State; L : List) return Parse_State is
+     (if S.Input = nil then Parse_Pair ((Scan_Line ("PERIOD> "), S.Output), L)
+      elsif car (S.Input) /= RPAR then
+        (cons (S.Output, S.Input), Link (Rev_List (L), ERROR))
+      else (cdr (S.Input), Link (Rev_List (L), S.Output)));
+
+   function Parse_Period (S : Parse_State) return Parse_State is
+     (if S.Input = nil then Parse_Period ((Scan_Line ("PERIOD> "), S.Output))
+      else Parse_Pair (Parse (S.Input), S.Output));
 
    function Parse_List (S : Parse_State) return Parse_State is
-     (if S.Input = nil then Parse_List ((Scan_Line, S.Output))
+     (if S.Input = nil then Parse_List ((Scan_Line ("LPAR> "), S.Output))
       elsif car (S.Input) = RPAR then (cdr (S.Input), Rev_List (S.Output))
-      elsif car (S.Input) = LPAR then
-          Parse_List (Parse_List ((cdr (S.Input), nil)) & S.Output)
-      else Parse_List ((cdr (S.Input), cons (car (S.Input), S.Output))));
+      elsif car (S.Input) = PERIOD then Parse_Period ((cdr (S.Input), S.Output))
+      else Parse_List (Parse (S.Input) & S.Output));
 
-   function Parse (S : Expr) return Parse_State is
+   function Parse (S : List) return Parse_State is
      (if S = nil then (nil, nil)
       elsif car (S) = LPAR then Parse_List ((cdr (S), nil))
+      elsif car (S) = QUOTE then (cddr (S), cadr (S))
       else (cdr (S), car (S)));
 
-   procedure Interpreter is
-   begin
-      loop
-         declare
-            E : Expr := Scan_Line ("? ");
-            S : Parse_State;
-         begin
-            Put_Line (" Scan_Line => " & Img (E));
-
-            S := Parse (E);
-            Put_Line (" Parse output => " & Img (S.Output));
-
-            Put_Line (" Leftover input => " & Img (S.Input));
-         end;
-      end loop;
-   end Interpreter;
-
-   procedure Put (A : Atom) is
-   begin
-      Put (Image (A));
-   end Put;
-
 begin
-   Interpreter;
+   REPL : loop
+      declare
+         E : Expr := Scan_Line ("> ");
+         S : Parse_State;
+      begin
+         S := Parse (E);
+         Put_Line (" => " & Image (S.Output));
+
+         if S.Input /= nil then
+            Put_Line ("??? " & Image (S.Input));
+
+         elsif False and then not Atom (S.Output) then
+            Put_Line ("= "
+              & Image (evalquote (car (S.Output), cdr (S.output))));
+         end if;
+      end;
+   end loop REPL;
+
 exception
-   when others =>
+   when E : others =>
+      Put (Exception_Information (E));
       Dump;
 end Lispcmd;
