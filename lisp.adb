@@ -29,9 +29,6 @@ package body Lisp is
    use String_Lookup;
 
    Atoms_By_Name   : Dictionary;
-   Memory_Info     : Heap_Ptr := new Heap; --  Used for annotations
-   Memory_Usage    : Natural := 0;
-   First_Allocated : List := Nil;
    Last_Allocated  : List := Nil;
 
    ----------
@@ -39,58 +36,11 @@ package body Lisp is
    ----------
 
    function cons (A, D : Expr) return Non_Nil_List is
-
-      LCG_A : constant := 1_103_515_245; --  From GLIBC's random generator
-      LCG_C : constant :=        12_345;
-
-      type Hash_Val is mod 2**32;
-
-      Hash_To_List : constant := Hash_Val'Modulus / Max_Lists;
-
-      function U (E : Expr) return Hash_Val is (Hash_Val (E - Expr'First));
-
-      function To_List (U : Hash_Val) return List is
-        (List'First + List'Base (U / Hash_To_List));
-
-      function Hash (A : Hash_Val; D : Hash_Val := 0) return Hash_Val is
-        (LCG_A * ((LCG_A * A + LCG_C) xor D));
-
-      Free_Pair_Val  : constant Pair := (nil, nil);
-      Free_Pair_List : constant List := To_List (Hash (U (nil), U (nil)));
-
-      P : constant Pair := (A, D);
-      H : Hash_Val := Hash (U (A), U (D));
-      L : List;
    begin
-      for J in 1 .. Max_Lists loop
-         L := To_List (H);
+      Last_Cons := Last_Cons - 1;
+      Memory (Last_Cons) := (A, D);
 
-         if Memory (L) = P then
-            return L;
-         end if;
-
-         exit when Memory (L) = Free_Pair_Val and then L /= Free_Pair_List;
-         H := Hash (H);
-      end loop;
-
-      if Memory (L) /= Free_Pair_Val then
-         raise Storage_Error;
-      end if;
-
-      Memory (L) := P;
-      Memory_Info (L) := (Atomic (Memory_Usage), nil);
-
-      if First_Allocated = Nil then
-         First_Allocated := L;
-
-      else
-         Memory_Info (Last_Allocated).D := L;
-      end if;
-
-      Memory_Usage := Memory_Usage + 1;
-      Last_Allocated := L;
-
-      return L;
+      return Last_Cons;
    end cons;
 
    ----------
@@ -135,7 +85,6 @@ package body Lisp is
       end Put;
 
       P : Pair;
-      L : List := First_Allocated;
    begin
       Put_Line ("*** NAMES ***");
       Put (Atomic'First, 5);
@@ -154,16 +103,16 @@ package body Lisp is
       New_Line;
 
       Put_Line ("*** MEMORY ***");
-      while L /= nil loop
+      for L in reverse Last_Cons .. nil - 1 loop
          P := Memory (L);
 
-         Put (Memory_Info (L).A, 5);
+         Put (nil - L, 5);
          Put (" | ");
          if P.A in Atomic then
             Put (Image (P.A));
 
          else
-            Put (Memory_Info (P.A).A, 5);
+            Put (nil - P.A, 5);
          end if;
 
          Set_Col (25);
@@ -172,14 +121,13 @@ package body Lisp is
             Put (Image (P.D));
 
          else
-            Put (Memory_Info (P.D).A, 5);
+            Put (nil - P.D, 5);
          end if;
          Set_Col (33);
          Put ("| ");
          Put (Left (Image (L), 40));
          New_Line;
 
-         L := Memory_Info (L).D;
       end loop;
    end Dump;
 
@@ -187,6 +135,5 @@ begin
    Names (0) := ' ';
    for P in Memory'Range loop
       Memory (P) := (0, 0);
-      Memory_Info (P) := (0, 0);
    end loop;
 end Lisp;

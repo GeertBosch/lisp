@@ -65,7 +65,9 @@ private
    type Heap is array (Non_Nil_List) of Pair;
    type Heap_Ptr is access Heap;
 
-   Memory  : Heap_Ptr := new Heap;
+   Last_Cons : List := nil;
+
+   Memory  : Heap_Ptr := new Heap'(others => (nil, nil));
 
    function car (S : Non_Nil_List) return Expr is
      (if atom (S) then S else Memory (S).A);

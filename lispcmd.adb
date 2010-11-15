@@ -162,9 +162,15 @@ begin
          if cdr (S) /= nil then
             Put_Line ("??? " & Image (cdr (S)));
 
-         elsif False and then not Atom (car (S)) then
-            Put_Line ("= " & Image (evalquote (caar (S), cdar (S))));
+         elsif not Atom (car (S)) and then not Atom (cdar (S)) then
+            begin
+               Put_Line ("= " & Image (evalquote (caar (S), cdar (S))));
+            exception
+               when Constraint_Error => Put_Line (("Error in (evalquote "
+                  & Image (caar (S)) & ", " & Image (cdar (S)) & ")"));
+            end;
          end if;
+         exit when Atom (car (S)) and then Image (S) = "(QUIT)";
       end;
    end loop REPL;
 

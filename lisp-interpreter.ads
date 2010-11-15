@@ -1,8 +1,9 @@
+pragma Ada_2012;
 package Lisp.Interpreter is
 
    --  Operations on expressions
 
-   function equal (X, Y : Expr) return Boolean is (X = Y);
+   function equal (X, Y : Expr) return Boolean;
    function subst (X, Y, Z : Expr) return Expr;
 
    --  Operations on lists
@@ -32,6 +33,10 @@ private
       LABEL  : constant Atomic := Lisp.Atom ("LABEL");
       QUOTE  : constant Atomic := Lisp.Atom ("QUOTE");
    end Keywords;
+
+   function equal (X, Y : Expr) return Boolean is
+     (if atom (X) then atom (Y) and then eq (X, Y)
+      else equal (car (X), car (Y)) and then equal (cdr (X), cdr (Y)));
 
    function subst (X, Y, Z : Expr) return Expr is
      (if equal (Y, Z) then X
@@ -84,7 +89,7 @@ private
          elsif Fn = Keywords.CONS then cons (car (X), cadr (X))
          elsif Fn = Keywords.ATOM then atom (car (X))
          elsif Fn = Keywords.EQ then eq (car (X), cadr (X))
-         else cons (cons (cons (cons (Atom ("APPLY"), Fn), X), A), nil))
+         else cons (Atom ("APPLY"), cons (Fn, cons (X, cons (A, nil)))))
       elsif car (Fn) = Keywords.LAMBDA then
          eval (caddr (Fn), pairlis (cadr (Fn), X, A))
       elsif car (Fn) = Keywords.LABEL then
