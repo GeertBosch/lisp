@@ -1,0 +1,31 @@
+>  => ()
+>  => A
+>  => (A)
+>  => (A.B)
+>  => (A B)
+= (APPLY A (B) ())
+>  => (A B.C)
+= (APPLY A (B.C) ())
+>  => (A (B C).D)
+= (APPLY A ((B C).D) ())
+>  => (A (B C) D (E.F).G)
+= (APPLY A ((B C) D (E.F).G) ())
+>  => (CAR (A.B))
+= A
+>  => (CDR (A.B))
+= B
+>  => (EQ A B)
+= ()
+>  => (EQ A A)
+= T
+>  => (C RPAR)
+??? ERROR
+>  => (RPAR A RPAR)
+??? ERROR
+>  => (RPAR)
+??? ERROR
+>  => (PERIOD B)
+??? ERROR
+>  => ((LAMBDA (X Y) (CONS (CAR X) Y)) (A B) (C D))
+= (A C D)
+>  => QUIT
