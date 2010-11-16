@@ -130,10 +130,4 @@ package body Lisp is
 
       end loop;
    end Dump;
-
-begin
-   Names (0) := ' ';
-   for P in Memory'Range loop
-      Memory (P) := (0, 0);
-   end loop;
 end Lisp;
