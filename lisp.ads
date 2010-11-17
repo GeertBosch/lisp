@@ -66,8 +66,7 @@ private
    type Heap_Ptr is access Heap;
 
    Last_Cons : List := nil;
-
-   Memory  : Heap_Ptr := new Heap'(others => (nil, nil));
+   Memory    : Heap_Ptr := new Heap'(others => (nil, nil));
 
    function car (S : Non_Nil_List) return Expr is
      (if atom (S) then S else Memory (S).A);
@@ -99,5 +98,4 @@ private
       elsif E in list then '(' & Image_List (E) & ')'
       elsif Names (E) = ' ' then ""
       else Names (E) & Image (E + 1));
-
 end Lisp;

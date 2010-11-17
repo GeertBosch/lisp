@@ -97,5 +97,4 @@ private
       else cons (cons (cons (cons (Atom ("APPLY"), Fn), X), A), nil));
 
    function evalquote (Fn, X : Expr) return Expr is (apply (Fn, X, nil));
-
 end Lisp.Interpreter;

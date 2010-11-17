@@ -8,18 +8,13 @@ procedure Lispcmd is
 
    Scan_Error : exception;
 
-   LPAR      : constant Atomic := Atom ("LPAR");
-   RPAR      : constant Atomic := Atom ("RPAR");
-   PERIOD    : constant Atomic := Atom ("PERIOD");
-   QUOTE     : constant Atomic := Atom ("QUOTE");
-   ERROR     : constant Atomic := Atom ("ERROR");
+   LPAR    : constant Atomic := Atom ("LPAR");
+   RPAR    : constant Atomic := Atom ("RPAR");
+   PERIOD  : constant Atomic := Atom ("PERIOD");
+   QUOTE   : constant Atomic := Atom ("QUOTE");
+   ERROR   : constant Atomic := Atom ("ERROR");
 
    Last_Predefined : constant Atomic :=  ERROR;
-
-   function Link (Left : List; Right : Expr) return List is
-     (if Left not in Atomic then cons (car (Left), Link (cdr (Left), Right))
-      elsif Left = nil then Right
-      else cons (Left, Right));
 
    function "-" (Left, Right : Character) return Integer is
      (Character'Pos (Left) - Character'Pos (Right));
@@ -42,10 +37,13 @@ procedure Lispcmd is
    function Rev_List (S : List) return Expr is 
      (if S = nil then nil else Reverse_And_Append (S, nil));
 
+   function Remove_Comment_From_Line (S : String) return String is
+     (if S'Length > 0 and then S (S'First) = '#' then "" else S);
+
    function Get_Line (Prompt : String) return String is
    begin
       Put (Prompt);
-      return Get_Line;
+      return Remove_Comment_From_Line (Get_Line);
    end Get_Line;
 
    function Scan_Line (Prompt : String := "> ") return Expr is
@@ -73,7 +71,7 @@ procedure Lispcmd is
 
       procedure Scan_Atom_Part is
       begin
-         while Ptr < Last 
+         while Ptr < Last
            and then Line (Ptr + 1) in 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9'
          loop
             Ptr := Ptr + 1;
@@ -84,7 +82,7 @@ procedure Lispcmd is
       --  Build the result in reversed order, and correct order at end
       while Ptr <= Line'Last loop
          case Line (Ptr) is
-            when ' '      => null;
+            when ' '    => null;
             when 'A'..'Z' | 'a' .. 'z' =>
                Scan_Atomic_Symbol : declare
                   First : constant Positive := Ptr;
@@ -115,7 +113,8 @@ procedure Lispcmd is
    --  This subtype is used for documentation purposes in communicating current
    --  parse state. The car of a Parse_State represents the resulting parse
    --  tree, while the cdr contains remaining source text. In case of a syntax
-   --  error, the cdr is a non-nil atom
+   --  error, the cdr is a non-nil atom while the car is the remaining source
+   --  after the error was detected.
 
    function appcar (X : Non_Nil_List; E : Expr) return Non_Nil_List is
      (cons (cons (car (X), E), cdr (X))); -- (A, B) => ((A, E), B)
@@ -129,7 +128,7 @@ procedure Lispcmd is
      (if cdr (S) = nil then Parse_Pair (cons (car (S), Scan_Line), L)
       elsif atom (cdr (S)) then S -- Propagate earlier error
       elsif cadr (S) /= RPAR then (cons (cdr (S), ERROR))
-      else cons (Link (Rev_List (L), car (S)), cddr (S)));
+      else cons (append (Rev_List (L), car (S)), cddr (S)));
 
    function Parse_Period (S : Parse_State) return Parse_State is
      (if cdr (S) = nil then Parse_Period (cons (car (S), Scan_Line))
@@ -150,16 +149,31 @@ procedure Lispcmd is
       elsif car (S) = QUOTE then cdr (S)
       else S);
 
+   function Parse_Line (S : Parse_State) return Parse_State is
+     (if cdr (S) in Non_Nil_List then
+        Parse_Line (appcar (Parse (cdr (S)), car (S)))
+      elsif cdr (S) = nil and then (car (S) = nil or else cdar (S) /= nil) then
+         cons (Rev_List (car (S)), nil)
+      else cons (caar (S), cdr (S)));
+
+   Definitions : List := nil;
+
 begin
    REPL : loop
       declare
          E : Expr := Scan_Line ("> ");
          S : List;
       begin
-         S := Parse (E);
-         Put_Line (" => " & Image (car (S)));
+         S := Parse_Line (cons (nil, E));
 
-         if cdr (S) /= nil then
+         if S /= nil then
+            Put_Line (" => " & Image (car (S)));
+         end if;
+
+         if S = nil then
+            null;
+
+         elsif cdr (S) /= nil then
             Put_Line ("??? " & Image (cdr (S)));
 
          elsif not Atom (car (S)) and then not Atom (cdar (S)) then
@@ -169,13 +183,15 @@ begin
                when Constraint_Error => Put_Line (("Error in (evalquote "
                   & Image (caar (S)) & ", " & Image (cdar (S)) & ")"));
             end;
+
+         elsif Atom (car (S)) and then Image (S) = "(QUIT)" then
+            exit REPL;
          end if;
-         exit when Atom (car (S)) and then Image (S) = "(QUIT)";
       end;
    end loop REPL;
 
 exception
-   when Ada.IO_Exceptions.End_Error => Put_Line ("Goodbye.");
+   when Ada.IO_Exceptions.End_Error => Put_Line ("End of input. Goodbye.");
    when E : others =>
       Put (Exception_Information (E));
       Dump;
