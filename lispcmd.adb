@@ -48,14 +48,22 @@ procedure Lispcmd is
    -- Scanner and Preprocessor --
    ------------------------------
 
+   type Scan_State is record
+      Ptr    : Integer;
+      Result : Expr;
+   end record;
+
+   function Head (S : String) return Character is (S (S'First));
+   function Tail (S : String) return String is (S (S'First + 1 .. S'Last));
+
+   function Whiteout (C : Character) return Character is
+     (if C <= ' ' then C else ' ');
+
+   function Whiteout (S : String) return String is
+     (if S = "" then S else Whiteout (Head (S)) & Whiteout (Tail (S)));
+
    function Remove_Comment_From_Line (S : String) return String is
      (if S'Length > 0 and then S (S'First) = '#' then "" else S);
-
-   function Get_Line (Prompt : String) return String is
-   begin
-      Put (Prompt);
-      return Remove_Comment_From_Line (Get_Line);
-   end Get_Line;
 
    function Expand_Def (E : Expr; A : List) return Expr is
      (if A = nil or else E in List then E
@@ -66,67 +74,44 @@ procedure Lispcmd is
      (if E = nil then E
       else cons (Expand_Def (car (E), A), Expand_List (cdr (E), A)));
 
-   function Scan_Line (Prompt : String := "> ") return Expr is
-      Line   : constant String := Get_Line (Prompt);
-      Last   : constant Natural := Line'Last;
-      Ptr    : Positive := Line'First;
-      Result : Expr := Nil;
+   function Make_Atom (S : Scan_State; A : Atomic) return Scan_State is
+     (if Needs_Quoting (A) then (S.Ptr, cons (A, cons (QUOTE, S.Result)))
+      else (S.Ptr, cons (A, S.Result)));
 
-      procedure Error (Msg : String; Loc : Positive);
+   function Make_Atom (S : Scan_State; Text : String) return Scan_State is
+     (Make_Atom ((Text'Last + 1, S.Result), Atom (Upcase (Text))));
 
-      procedure Scan_Atom_Part;
+   function Scan_Atom_Part (Line : String; P : Positive) return Positive is
+     (if P > Line'Last then P
+      elsif Line (P) not in 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' then P
+      else Scan_Atom_Part (Line, P + 1));
 
-      procedure Error (Msg : String; Loc : Positive) is
-         Prefix : String := Line (Line'First .. Loc - 1);
-      begin
-         for C of Prefix loop
-            C := (if C > ' ' then ' ' else C);
-         end loop;
+   function Scan_Atom (S : Scan_State; Line : String) return Scan_State is
+     (Make_Atom (S, Line (S.Ptr .. Scan_Atom_Part (Line, S.Ptr) - 1)));
 
-         Put_Line (Standard_Error, ">>> " & Line);
-         Put_Line (Standard_Error, "    " & Prefix & '^' & Msg);
+   function Scan_Line (S : Scan_State; Line : String) return Scan_State is
+     (if S.Ptr < Line'First then S
+      elsif S.Ptr > Line'Last then (S.Ptr, Rev_List (S.Result))
+      else (case Line (S.Ptr) is
+            when ' ' => Scan_Line ((S.Ptr + 1, S.Result), Line),
+            when 'A'..'Z' | 'a'..'z' => Scan_Line (Scan_Atom (S, Line), Line),
+            when '(' => Scan_Line ((S.Ptr + 1, cons (LPAR, S.Result)), Line),
+            when ')' => Scan_Line ((S.Ptr + 1, cons (RPAR, S.Result)), Line),
+            when '.' => Scan_Line ((S.Ptr + 1, cons (PERIOD, S.Result)), Line),
+            when others => (-S.Ptr, S.Result)));
 
-         raise Scan_Error;
-      end Error;
-
-      procedure Scan_Atom_Part is
-      begin
-         while Ptr < Last
-           and then Line (Ptr + 1) in 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9'
-         loop
-            Ptr := Ptr + 1;
-         end loop;
-      end Scan_Atom_Part;
-
+   function Scan_Line return Expr is
+      Line  : constant String := Get_Line;
+      State : Scan_State := Scan_Line ((Line'First, nil), Line);
    begin
-      --  Build the result in reversed order, and correct order at end
-      while Ptr <= Line'Last loop
-         case Line (Ptr) is
-            when ' '    => null;
-            when 'A'..'Z' | 'a' .. 'z' =>
-               Scan_Atomic_Symbol : declare
-                  First : constant Positive := Ptr;
-                  A     : Atomic;
-               begin
-                  Scan_Atom_Part;
-                  A := Atom (Upcase (Line (First .. Ptr)));
+      if State.Ptr < Line'First then
+         Put_Line (Standard_Error, ">>> " & Line);
+         Put_Line (Standard_Error, "    " & Whiteout (Line (1 .. -State.Ptr)));
+         return nil;
 
-                  Result := cons (A,
-                    (if Needs_Quoting (A)
-                     then cons (QUOTE, Result)
-                     else Result));
-               end Scan_Atomic_Symbol;
-
-            when '('    => Result := cons (LPAR, Result);
-            when ')'    => Result := cons (RPAR, Result);
-            when '.'    => Result := cons (PERIOD, Result);
-            when others => Error ("invalid character", Ptr);
-         end case;
-
-         Ptr := Ptr + 1;
-      end loop;
-
-      return Expand_List (Rev_List (Result), Defines);
+      else
+         return State.Result;
+      end if;
    end Scan_Line;
 
    ------------
@@ -182,8 +167,9 @@ procedure Lispcmd is
 
 begin -- Processing for Lispcmd
    REPL : loop
+      Put ("> ");
       declare
-         E : Expr := Scan_Line ("> ");
+         E : Expr := Scan_Line;
          S : List;
       begin
          S := Parse_Line (cons (nil, E));
