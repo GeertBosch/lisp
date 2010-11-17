@@ -13,8 +13,15 @@ procedure Lispcmd is
    PERIOD  : constant Atomic := Atom ("PERIOD");
    QUOTE   : constant Atomic := Atom ("QUOTE");
    ERROR   : constant Atomic := Atom ("ERROR");
+   QUIT    : constant Atomic := Atom ("QUIT");
+   DEFINE  : constant Atomic := Atom ("DEFINE");
 
    Last_Predefined : constant Atomic :=  ERROR;
+
+   Defines : List := nil;
+
+   function "&" (Left : String; Right : Expr) return String is
+     (Left & Image (Right));
 
    function "-" (Left, Right : Character) return Integer is
      (Character'Pos (Left) - Character'Pos (Right));
@@ -37,6 +44,10 @@ procedure Lispcmd is
    function Rev_List (S : List) return Expr is 
      (if S = nil then nil else Reverse_And_Append (S, nil));
 
+   ------------------------------
+   -- Scanner and Preprocessor --
+   ------------------------------
+
    function Remove_Comment_From_Line (S : String) return String is
      (if S'Length > 0 and then S (S'First) = '#' then "" else S);
 
@@ -45,6 +56,15 @@ procedure Lispcmd is
       Put (Prompt);
       return Remove_Comment_From_Line (Get_Line);
    end Get_Line;
+
+   function Expand_Def (E : Expr; A : List) return Expr is
+     (if A = nil or else E in List then E
+      elsif caar (A) = E then cdar (A)
+      else Expand_Def (E, cdr (A)));
+
+   function Expand_List (E : Expr; A : List) return Expr is
+     (if E = nil then E
+      else cons (Expand_Def (car (E), A), Expand_List (cdr (E), A)));
 
    function Scan_Line (Prompt : String := "> ") return Expr is
       Line   : constant String := Get_Line (Prompt);
@@ -106,8 +126,12 @@ procedure Lispcmd is
          Ptr := Ptr + 1;
       end loop;
 
-      return Rev_List (Result);
+      return Expand_List (Rev_List (Result), Defines);
    end Scan_Line;
+
+   ------------
+   -- Parser --
+   ------------
 
    subtype Parse_State is List;
    --  This subtype is used for documentation purposes in communicating current
@@ -156,37 +180,34 @@ procedure Lispcmd is
          cons (Rev_List (car (S)), nil)
       else cons (caar (S), cdr (S)));
 
-   Definitions : List := nil;
-
-begin
+begin -- Processing for Lispcmd
    REPL : loop
       declare
          E : Expr := Scan_Line ("> ");
          S : List;
       begin
          S := Parse_Line (cons (nil, E));
-
-         if S /= nil then
-            Put_Line (" => " & Image (car (S)));
-         end if;
+         Put_Line (if S = nil then "" else " => " & car (S));
 
          if S = nil then
             null;
 
          elsif cdr (S) /= nil then
-            Put_Line ("??? " & Image (cdr (S)));
+            Put_Line ("??? " & cdr (S));
 
-         elsif not Atom (car (S)) and then not Atom (cdar (S)) then
+         elsif car (S) in Non_Nil_List and then caar (S) = DEFINE then
+            Defines := pairlis (cons (cadar (S), nil), cddar (S), Defines);
+
+         elsif car (S) in Non_Nil_List and then not atom (cdar (S)) then
             begin
-               Put_Line ("= " & Image (evalquote (caar (S), cdar (S))));
+               Put_Line ("= " & evalquote (caar (S), cdar (S)));
             exception
                when Constraint_Error => Put_Line (("Error in (evalquote "
-                  & Image (caar (S)) & ", " & Image (cdar (S)) & ")"));
+                  & caar (S) & " " & cdar (S) & ")"));
             end;
-
-         elsif Atom (car (S)) and then Image (S) = "(QUIT)" then
-            exit REPL;
          end if;
+
+         exit REPL when car (S) = QUIT;
       end;
    end loop REPL;
 
