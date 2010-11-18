@@ -1,12 +1,11 @@
 pragma Ada_2012;
 with Lisp; use Lisp;
 with Lisp.Interpreter; use Lisp.Interpreter;
+with Lisp.Dump;
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Exceptions; use Ada.Exceptions;
 with Ada.IO_Exceptions;
 procedure Lispcmd is
-
-   Scan_Error : exception;
 
    LPAR    : constant Atomic := Atom ("LPAR");
    RPAR    : constant Atomic := Atom ("RPAR");
@@ -15,8 +14,9 @@ procedure Lispcmd is
    ERROR   : constant Atomic := Atom ("ERROR");
    QUIT    : constant Atomic := Atom ("QUIT");
    DEFINE  : constant Atomic := Atom ("DEFINE");
+   DUMP    : constant Atomic := Atom ("DUMP");
 
-   Last_Predefined : constant Atomic :=  ERROR;
+   Last_Predefined : constant Atomic := New_Atom;
 
    Defines : List := nil;
 
@@ -26,6 +26,8 @@ procedure Lispcmd is
    function "-" (Left, Right : Character) return Integer is
      (Character'Pos (Left) - Character'Pos (Right));
 
+   function Head (S : String) return Character is (S (S'First));
+
    function Upcase (C : Character) return Character is
      (if C not in 'a' .. 'z' then C
       else Character'Val (Character'Pos (C) + ('A' - 'a')));
@@ -33,6 +35,8 @@ procedure Lispcmd is
    function Upcase (S : String) return String is
      (if S'Length = 0 then ""
       else Upcase (S (S'First)) & Upcase (S (S'First + 1 .. S'Last)));
+
+   function Tail (S : String) return String is (S (S'First + 1 .. S'Last));
 
    function Needs_Quoting (A : Atomic) return Boolean is
      (A /= nil and A <= Last_Predefined);
@@ -53,17 +57,14 @@ procedure Lispcmd is
       Result : Expr;
    end record;
 
-   function Head (S : String) return Character is (S (S'First));
-   function Tail (S : String) return String is (S (S'First + 1 .. S'Last));
-
    function Whiteout (C : Character) return Character is
-     (if C <= ' ' then C else ' ');
+     (if C in ' ' | ASCII.HT then C else ' ');
 
    function Whiteout (S : String) return String is
      (if S = "" then S else Whiteout (Head (S)) & Whiteout (Tail (S)));
 
-   function Remove_Comment_From_Line (S : String) return String is
-     (if S'Length > 0 and then S (S'First) = '#' then "" else S);
+   function Remove_Comment (S : String) return String is
+     (if S'Length > 0 and then Head (S) = '#' then "" else S);
 
    function Expand_Def (E : Expr; A : List) return Expr is
      (if A = nil or else E in List then E
@@ -101,7 +102,7 @@ procedure Lispcmd is
             when others => (-S.Ptr, S.Result)));
 
    function Scan_Line return Expr is
-      Line  : constant String := Get_Line;
+      Line  : constant String := Remove_Comment (Get_Line);
       State : Scan_State := Scan_Line ((Line'First, nil), Line);
    begin
       if State.Ptr < Line'First then
@@ -110,7 +111,7 @@ procedure Lispcmd is
          return nil;
 
       else
-         return State.Result;
+         return Expand_List (State.Result, Defines);
       end if;
    end Scan_Line;
 
@@ -191,9 +192,13 @@ begin -- Processing for Lispcmd
                when Constraint_Error => Put_Line (("Error in (evalquote "
                   & caar (S) & " " & cdar (S) & ")"));
             end;
-         end if;
 
-         exit REPL when car (S) = QUIT;
+         elsif car (S) = DUMP then
+            Lisp.Dump;
+
+         elsif car (S) = QUIT then
+            exit REPL;
+         end if;
       end;
    end loop REPL;
 
@@ -201,5 +206,5 @@ exception
    when Ada.IO_Exceptions.End_Error => Put_Line ("End of input. Goodbye.");
    when E : others =>
       Put (Exception_Information (E));
-      Dump;
+      Lisp.Dump;
 end Lispcmd;

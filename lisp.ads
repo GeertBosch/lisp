@@ -8,8 +8,8 @@ package Lisp is
 
    subtype Atomic is Expr range 0 .. Expr'Last;
 
-   nil       : constant Atomic := 0; --  Also empty list or falsity
-   T         : constant Atomic := 1; --  Truth
+   nil       : constant Atomic := 0; --  empty list or falsity
+   T         : constant Atomic := 1; --  truth
 
    subtype Predicate is Atomic range nil .. T; -- Note any non-nil expr is true
    subtype List is Expr range Expr'First .. 0;
@@ -23,6 +23,7 @@ package Lisp is
    function Image (E : Expr) return String;
    function False (E : Expr) return Boolean is (E = nil);
    function True  (E : Expr) return Boolean is (E /= nil);
+   function New_Atom return Atomic is (Atom (""));
 
    --  Five elementary functions
 
@@ -51,10 +52,6 @@ package Lisp is
    function caddr (S : Non_Nil_List) return Expr is (cadr (cdr (S)));
    function cdddr (S : Non_Nil_List) return Expr is (cddr (cdr (S)));
 
-   --  Debug procedure
-
-   procedure Dump;
-
 private
 
    type Pair is record
@@ -65,37 +62,14 @@ private
    type Heap is array (Non_Nil_List) of Pair;
    type Heap_Ptr is access Heap;
 
+   Last_Atom : Atomic := T + 1;
    Last_Cons : List := nil;
    Memory    : Heap_Ptr := new Heap'(others => (nil, nil));
 
-   function car (S : Non_Nil_List) return Expr is
-     (if atom (S) then S else Memory (S).A);
-
-   function cdr (S : Non_Nil_List) return Expr is
-     (if atom (S) then S else Memory (S).D);
-
+   function car (S : Non_Nil_List) return Expr is (Memory (S).A);
+   function cdr (S : Non_Nil_List) return Expr is (Memory (S).D);
    function atom (E : Expr) return Predicate is (Boolean'Pos (E in Atomic));
-
    function eq (X, Y : Expr) return Predicate is (Boolean'Pos (X = Y));
 
-   type Name_Table is array (Atomic) of Character;
-   type Name_Table_Ptr is access Name_Table;
-
-   Last_Atom : Atomic := T + 1;
-
-   Names   : Name_Table_Ptr := new Name_Table'
-     (nil => ' ', T => 'T', others => ' ');
-
-   function Image_List (E : Expr) return String is
-     (if E = nil then ""
-      elsif E in Atomic then "." & Image (E)
-      elsif cdr (E) = nil then Image (car (E))
-      elsif cdr (E) in Atomic then Image (car (E)) & Image_List (cdr (E))
-      else Image (car (E)) & ' ' & Image_List (cdr (E)));
-
-   function Image (E : Expr) return String is
-     (if E = nil then "()"
-      elsif E in list then '(' & Image_List (E) & ')'
-      elsif Names (E) = ' ' then ""
-      else Names (E) & Image (E + 1));
+   function Next (A : Atomic) return Atomic;
 end Lisp;

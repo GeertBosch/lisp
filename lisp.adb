@@ -1,35 +1,49 @@
 pragma Ada_2012;
-with Ada.Containers; use Ada.Containers;
-with Ada.Containers.Ordered_Sets;
-with Ada.Text_IO; use Ada.Text_IO;
 package body Lisp is
 
-   ----------------
-   -- Dictionary --
-   ----------------
+   type Name_Table is array (Atomic range <>) of Character;
+   type Name_Table_Ptr is access Name_Table;
 
-   function Before (Left, Right : Atomic) return Boolean is
-     (if Left = Right then False
-      elsif Names (Left) = Names (Right) then Before (Left + 1, Right + 1)
-      else Names (Left) < Names (Right));
+   Names   : Name_Table_Ptr := new Name_Table'
+     (nil => ' ', T => 'T', T + 1 .. Atomic'Last => ' ');
 
-   package Ordered_Atoms is new Ordered_Sets (Atomic, "<" => Before);
-   use Ordered_Atoms;
-   subtype Dictionary is Ordered_Atoms.Set;
+   function Image_List (E : Expr) return String is
+     (if E = nil then ""
+      elsif E in Atomic then "." & Image (E)
+      elsif cdr (E) = nil then Image (car (E))
+      elsif cdr (E) in Atomic then Image (car (E)) & Image_List (cdr (E))
+      else Image (car (E)) & ' ' & Image_List (cdr (E)));
 
-   function Next (Item : Atomic) return Atomic is
-     (if Names (Item) = ' ' then Item + 1 else Next (Item + 1));
+   function Image (E : Expr) return String is
+     (if E = nil then "()"
+      elsif E in list then '(' & Image_List (E) & ')'
+      elsif Names (E) = ' ' then ""
+      else Names (E) & Image (E + 1));
 
-   function Last (Item : Atomic) return Atomic is (Next (Item) - 2);
+   ----------
+   -- Atom --
+   ----------
 
-   function Key (Item : Atomic) return String is
-     (String (Names (Item .. Last (Item))));
+   function Atom (Name : String) return Atomic is
 
-   package String_Lookup is new Ordered_Atoms.Generic_Keys (String, Key);
-   use String_Lookup;
+      function Enter (Name : String) return Atomic is
+         New_Atom : constant Atomic := Last_Atom + 1;
+      begin
+         Last_Atom := New_Atom + Name'Length;
+         Names (New_Atom .. Last_Atom) := Name_Table (Name & ' ');
+         return New_Atom;
+      end Enter;
 
-   Atoms_By_Name   : Dictionary;
-   Last_Allocated  : List := Nil;
+      function Find (Name : String; From : Atomic) return Atomic is
+        (if From = nil or else Image (From) = Name then From
+         else Find (Name, Next (From)));
+
+      function Maybe_Enter (Name : String; Existing : Atomic) return Atomic is
+        (if Existing = nil or else Name = "" then Enter (Name) else Existing);
+
+   begin
+      return Maybe_Enter (Name, Find (Name, Next (nil)));
+   end Atom;
 
    ----------
    -- cons --
@@ -44,90 +58,10 @@ package body Lisp is
    end cons;
 
    ----------
-   -- Atom --
+   -- Next --
    ----------
 
-   function Atom (Name : String) return Atomic is
-      C : Cursor := Find (Atoms_By_Name, Name);
-      R : Atomic;
-   begin
-      if Has_Element (C) then
-         return Element (C);
-      end if;
-
-      Last_Atom := Last_Atom + 1;
-      R := Last_Atom;
-
-      for X of Name loop
-         Names (Last_Atom) := X;
-         Last_Atom := Last_Atom + 1;
-      end loop;
-
-      Names (Last_Atom) := ' ';
-
-      Include (Atoms_By_Name, R);
-      return R;
-   end Atom;
-
-   procedure Dump is
-      function Left (S : String; Length : Natural) return String is
-        (if S'Length <= Length then S
-         else S (S'First .. S'First - 1 + Length));
-
-      procedure Put (E : Expr; Width : Positive) is
-         S : constant String := E'Img;
-      begin
-         for J in S'Length + 1 .. Width loop
-            Put (' ');
-         end loop;
-
-         Put (S);
-      end Put;
-
-      P : Pair;
-   begin
-      Put_Line ("*** NAMES ***");
-      Put (Atomic'First, 5);
-      Put (" | ");
-
-      for N in Atomic'First .. Last_Atom loop
-         if Names (N) = ' ' then
-            New_Line;
-            Put (N + 1, 5);
-            Put (" | ");
-
-         else
-            Put (Names (N));
-         end if;
-      end loop;
-      New_Line;
-
-      Put_Line ("*** MEMORY ***");
-      for L in reverse Last_Cons .. nil - 1 loop
-         P := Memory (L);
-
-         Put (nil - L, 5);
-         Put (" | ");
-         if P.A in Atomic then
-            Put (Image (P.A));
-
-         else
-            Put (nil - P.A, 5);
-         end if;
-
-         Set_Col (25);
-
-         if P.D in Atomic then
-            Put (Image (P.D));
-
-         else
-            Put (nil - P.D, 5);
-         end if;
-         Set_Col (33);
-         Put ("| ");
-         Put (Left (Image (L), 40));
-         New_Line;
-
-      end loop;
-   end Dump;
+   function Next (A : Atomic) return Atomic is
+     (if Names (A) /= ' ' then Next (A + 1)
+      elsif A = Last_Atom then nil else A + 1);
 end Lisp;
