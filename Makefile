@@ -10,4 +10,4 @@ check: lispcmd test.out test.in
 	@./lispcmd <test.in | (diff -u test.out - && echo "OK")
 
 clean:
-	rm -f *.ali *.o b~*
+	rm -f *.ali *.o b~* lispcmd
