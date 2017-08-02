@@ -59,11 +59,11 @@ private
       D : Expr;
    end record;
 
-   type Heap is array (Non_Nil_List) of Pair;
+   type Heap is array (List) of Pair;
    type Heap_Ptr is access Heap;
 
    Last_Atom : Atomic := T + 1;
-   Last_Cons : List := nil;
+   Last_Cons : List := Non_Nil_List'Last;
    Memory    : Heap_Ptr := new Heap'(others => (nil, nil));
 
    function car (S : Non_Nil_List) return Expr is (Memory (S).A);
