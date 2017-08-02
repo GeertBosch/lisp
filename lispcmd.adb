@@ -1,10 +1,11 @@
 pragma Ada_2012;
-with Lisp; use Lisp;
-with Lisp.Interpreter; use Lisp.Interpreter;
-with Lisp.Dump;
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Exceptions; use Ada.Exceptions;
 with Ada.IO_Exceptions;
+
+with Lisp; use Lisp;
+with Lisp.Interpreter; use Lisp.Interpreter;
+with Lisp.Dump;
 procedure Lispcmd is
 
    LPAR    : constant Atomic := Atom ("LPAR");
