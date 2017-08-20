@@ -3,7 +3,7 @@ all: check
 FORCE:
 
 lispcmd: FORCE
-	@echo MAKE $@ ; gnatmake -q -gnatoa -fstack-check -g lispcmd
+	@echo MAKE $@ ; gnatmake -q -gnatgoa -fstack-check -g lispcmd -bargs -Es
 
 check: lispcmd test.out test.in
 	@echo CHECK

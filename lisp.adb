@@ -4,7 +4,7 @@ package body Lisp is
    type Name_Table is array (Atomic range <>) of Character;
    type Name_Table_Ptr is access Name_Table;
 
-   Names   : Name_Table_Ptr := new Name_Table'
+   Names   : constant Name_Table_Ptr := new Name_Table'
      (nil => ' ', T => 'T', T + 1 .. Atomic'Last => ' ');
 
    type Hash_Val is mod 2**32;
@@ -18,10 +18,14 @@ package body Lisp is
    ----------
 
    function Atom (Name : String) return Atomic is
+      function Enter (Name : String) return Atomic;
 
       function Enter (Name : String) return Atomic is
          New_Atom : constant Atomic := Last_Atom + 1;
       begin
+         if New_Atom + Name'Length > Names'Last then
+            raise Storage_Error with ("Literal memory limit exceeded");
+         end if;
          Last_Atom := New_Atom + Name'Length;
          Names (New_Atom .. Last_Atom) := Name_Table (Name & ' ');
          return New_Atom;
@@ -46,9 +50,13 @@ package body Lisp is
       function Hash (A, D : Expr) return Hash_Index is
         ((Hash_Val (A - Expr'First + 1) * 16729 xor
           Hash_Val (D - Expr'First) * 237) and Hash_Index'Last);
+      function Enter (A, D : Expr; H : Hash_Index) return Expr;
 
       function Enter (A, D : Expr; H : Hash_Index) return Expr is
       begin
+         if Last_Cons = List'First then
+            raise Storage_Error with "Memory limit exceeded";
+         end if;
          Last_Cons := Last_Cons - 1;
          Memory (Last_Cons) := (A, D);
          Hash_Table (H) := Last_Cons;
@@ -56,7 +64,7 @@ package body Lisp is
          return Last_Cons;
       end Enter;
 
-      function Maybe_Enter (A, D : Expr; H: Hash_Index) return Expr is
+      function Maybe_Enter (A, D : Expr; H : Hash_Index) return Expr is
         (if Memory (Hash_Table (H)) /= (A, D) then Enter (A, D, H)
          else Hash_Table (H));
 
@@ -70,7 +78,7 @@ package body Lisp is
 
    function Image (E : Expr) return String is
      (if E = nil then "()"
-      elsif E in list then '(' & Image_List (E) & ')'
+      elsif E in List then '(' & Image_List (E) & ')'
       elsif Names (E) = ' ' then ""
       else Names (E) & Image (E + 1));
 

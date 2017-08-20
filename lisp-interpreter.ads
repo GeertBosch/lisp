@@ -53,7 +53,7 @@ private
 
    function pairlis (X, Y, A : Expr) return Expr is
      (if X = nil then A
-      else cons (cons (car (x), car (y)), pairlis (cdr (x), cdr(y), a)));
+      else cons (cons (car (X), car (Y)), pairlis (cdr (X), cdr (Y), A)));
 
    function assoc (X : Expr; A : List) return Expr is
      (if equal (caar (A), X) then car (A) else assoc (X, cdr (A)));
@@ -93,7 +93,7 @@ private
       elsif car (Fn) = Keywords.LAMBDA then
          eval (caddr (Fn), pairlis (cadr (Fn), X, A))
       elsif car (Fn) = Keywords.LABEL then
-         apply (caddr (fn), X, cons (cons (cadr (Fn), caddr (Fn)), A))
+         apply (caddr (Fn), X, cons (cons (cadr (Fn), caddr (Fn)), A))
       else cons (cons (cons (cons (Atom ("APPLY"), Fn), X), A), nil));
 
    function evalquote (Fn, X : Expr) return Expr is (apply (Fn, X, nil));

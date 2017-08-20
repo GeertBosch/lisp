@@ -46,7 +46,7 @@ procedure Lispcmd is
      (if cdr (S) = nil then cons (car (S), T)
       else Reverse_And_Append (cdr (S), cons (car (S), T)));
 
-   function Rev_List (S : List) return Expr is 
+   function Rev_List (S : List) return Expr is
      (if S = nil then nil else Reverse_And_Append (S, nil));
 
    ------------------------------
@@ -91,12 +91,14 @@ procedure Lispcmd is
    function Scan_Atom (S : Scan_State; Line : String) return Scan_State is
      (Make_Atom (S, Line (S.Ptr .. Scan_Atom_Part (Line, S.Ptr) - 1)));
 
+   function Scan_Line return Expr;
    function Scan_Line (S : Scan_State; Line : String) return Scan_State is
      (if S.Ptr < Line'First then S
       elsif S.Ptr > Line'Last then (S.Ptr, Rev_List (S.Result))
       else (case Line (S.Ptr) is
             when ' ' => Scan_Line ((S.Ptr + 1, S.Result), Line),
-            when 'A'..'Z' | 'a'..'z' => Scan_Line (Scan_Atom (S, Line), Line),
+            when 'A' .. 'Z' |
+                 'a' .. 'z' => Scan_Line (Scan_Atom (S, Line), Line),
             when '(' => Scan_Line ((S.Ptr + 1, cons (LPAR, S.Result)), Line),
             when ')' => Scan_Line ((S.Ptr + 1, cons (RPAR, S.Result)), Line),
             when '.' => Scan_Line ((S.Ptr + 1, cons (PERIOD, S.Result)), Line),
@@ -104,7 +106,7 @@ procedure Lispcmd is
 
    function Scan_Line return Expr is
       Line  : constant String := Remove_Comment (Get_Line);
-      State : Scan_State := Scan_Line ((Line'First, nil), Line);
+      State : constant Scan_State := Scan_Line ((Line'First, nil), Line);
    begin
       if State.Ptr < Line'First then
          Put_Line (Standard_Error, ">>> " & Line);
@@ -171,7 +173,7 @@ begin -- Processing for Lispcmd
    REPL : loop
       Put ("> ");
       declare
-         E : Expr := Scan_Line;
+         E : constant Expr := Scan_Line;
          S : List;
       begin
          S := Parse_Line (cons (nil, E));
@@ -190,8 +192,10 @@ begin -- Processing for Lispcmd
             begin
                Put_Line ("= " & evalquote (caar (S), cdar (S)));
             exception
-               when Constraint_Error => Put_Line (("Error in (evalquote "
-                  & caar (S) & " " & cdar (S) & ")"));
+               when E : Constraint_Error =>
+                  Put_Line (("Error in (evalquote "
+                              & caar (S) & " " & cdar (S) & ")"));
+                  pragma Debug (Put_Line (Exception_Message (E)));
             end;
 
          elsif car (S) = DUMP then

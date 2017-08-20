@@ -8,6 +8,8 @@ procedure Lisp.Dump is
    function Fill (S : String; Width : Positive) return String is
      (if S'Length >= Width then S else Fill (S & ' ', Width));
 
+   procedure Put (E : Expr; Width : Positive);
+
    procedure Put (E : Expr; Width : Positive) is
       S : constant String := E'Img;
    begin
