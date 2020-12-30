@@ -20,8 +20,6 @@ package Lisp.Interpreter is
    function apply (Fn : Expr; X : List; A : List) return Expr;
    function evalquote (Fn, X : Expr) return Expr;
 
-private
-
    package Keywords is
       CAR    : constant Atomic := Lisp.Atom ("CAR");
       CDR    : constant Atomic := Lisp.Atom ("CDR");
@@ -33,6 +31,8 @@ private
       LABEL  : constant Atomic := Lisp.Atom ("LABEL");
       QUOTE  : constant Atomic := Lisp.Atom ("QUOTE");
    end Keywords;
+
+private
 
    function equal (X, Y : Expr) return Boolean is
      (if atom (X) then atom (Y) and then eq (X, Y)
